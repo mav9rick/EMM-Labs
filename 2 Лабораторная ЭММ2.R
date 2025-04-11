@@ -1,4 +1,3 @@
-
 if (!require(tseries)) 
 {
   install.packages("tseries")
@@ -98,11 +97,48 @@ garch_fit_3_0 <- garch(train_data, order = c(0, 3), trace = FALSE)
 cat("Оценка параметров GARCH(3,0):\n")
 print(coef(garch_fit_3_0))
 
-# Прогнозирование на тестовой выборке
-pred <- predict(garch_fit_3_0, n.ahead = length(test_data))
+# Функция для последовательного прогнозирования GARCH(3,0)
+sequential_garch_forecast <- function(garch_fit, data, n_ahead) {
+  params <- coef(garch_fit)  # Оцененные параметры
+  a0 <- params["a0"]
+  a1 <- params["a1"]
+  a2 <- params["a2"]
+  a3 <- params["a3"]
+  
+  n <- length(data)
+  h <- numeric(n_ahead)  # Вектор для прогнозов волатильности
+  forecast_values <- numeric(n_ahead)  # Вектор для прогнозов значений процесса
+  epsilon <- rnorm(n_ahead)  # Генерация случайных ошибок для прогноза
+  
+  # Инициализация последними значениями из обучающей выборки
+  last_values <- tail(data, 3)^2  # Квадраты последних трех наблюдений
+  h[1] <- a0 + a1 * last_values[3] + a2 * last_values[2] + a3 * last_values[1]
+  forecast_values[1] <- sqrt(h[1]) * epsilon[1]
+  
+  # Последовательное прогнозирование
+  for (t in 2:n_ahead) {
+    if (t == 2) {
+      h[t] <- a0 + a1 * forecast_values[t-1]^2 + a2 * last_values[3] + a3 * last_values[2]
+    } else if (t == 3) {
+      h[t] <- a0 + a1 * forecast_values[t-1]^2 + a2 * forecast_values[t-2]^2 + a3 * last_values[3]
+    } else {
+      h[t] <- a0 + a1 * forecast_values[t-1]^2 + a2 * forecast_values[t-2]^2 + a3 * forecast_values[t-3]^2
+    }
+    forecast_values[t] <- sqrt(h[t]) * epsilon[t]
+  }
+  
+  return(list(forecast_volatility = sqrt(h), forecast_values = forecast_values))
+}
 
-# График тестовой выборки и прогноза
+# Выполнение прогноза на 100 шагов вперед
+n_ahead <- 100
+forecast <- sequential_garch_forecast(garch_fit_3_0, train_data, n_ahead)
+
+# График квадратов наблюдений и прогнозов волатильности
 par(mfrow = c(1, 1))
-plot(sqrt(test_data^2), type = 'l', col = 'blue', main = "Прогноз GARCH(3,0) на тестовой выборке", ylab = "σ_n", xlab = "Время")
-lines(sqrt(pred^2), col = 'red', lty = 2)
-legend("topright", legend = c("Наблюдения", "Прогноз"), col = c("blue", "red"), lty = c(1, 2))
+plot(test_data[1:n_ahead]^2, type = "l", col = "blue", 
+     main = "Сравнение квадратов наблюдений и прогнозов GARCH(3,0)", 
+     ylab = "Квадраты значений / Волатильность", xlab = "Время")
+lines(forecast$forecast_volatility^2, col = "red", lty = 2)
+legend("topright", legend = c("Квадраты наблюдений", "Прогноз волатильности"), 
+       col = c("blue", "red"), lty = c(1, 2))
