@@ -24,15 +24,22 @@ t_max <- 100   # Время для моделирования
 # Реализация процесса капитала для заданного времени
 simulate_ruin_process <- function(U0, c, lambda, mu, t_max) {
   U <- U0
-  times <- c(0)  # Моменты страховых случаев
+  times <- c(0)
   capital <- c(U0)
   
   while (TRUE) {
-    tau <- rexp(1, rate=lambda)  # Время до следующего страхового случая
+    tau <- rexp(1, rate=lambda)
     t <- sum(times) + tau
-    if (t > t_max) break
     
-    X <- rexp(1, rate=1/mu)  # Размер страховой выплаты
+    if (t > t_max) {
+      # ДОБАВЛЯЕМ капитал до конца периода, даже если убытка уже не будет
+      U <- U + c * (t_max - sum(times))  # Доход до конца периода
+      times <- c(times, t_max)
+      capital <- c(capital, U)
+      break
+    }
+    
+    X <- rexp(1, rate=1/mu)
     U <- U + c * tau - X
     times <- c(times, t)
     capital <- c(capital, U)
@@ -42,6 +49,7 @@ simulate_ruin_process <- function(U0, c, lambda, mu, t_max) {
   
   list(times=times, capital=capital)
 }
+
 
 # Случай 1: условие разорения выполняется
 res1 <- simulate_ruin_process(U0, c, 0.3, 3, t_max)
